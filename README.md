@@ -34,3 +34,7 @@ cf_manager/
 ├── package.json # Dependencies
 ├── .env # Environment variables
 └── README.md # You're here!
+### 🎥 Demo
+
+<video src="C:\Users\tanis\Videos\Captures" controls width="600"></video>
+
