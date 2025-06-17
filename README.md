@@ -34,6 +34,9 @@ cf_manager/
 ├── package.json # Dependencies
 ├── .env # Environment variables
 └── README.md # You're here!
+"C:\Users\tanis\OneDrive\Pictures\Screenshots\Screenshot (353).png"
+"C:\Users\tanis\OneDrive\Pictures\Screenshots\Screenshot (354).png"
+"C:\Users\tanis\OneDrive\Pictures\Screenshots\Screenshot (355).png"
 ### 🎥 Demo
 
 <video src="C:\Users\tanis\Videos\Captures" controls width="600"></video>
