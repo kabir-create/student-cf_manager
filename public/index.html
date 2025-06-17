@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Codeforces Student Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    async function loadStudents() {
+      const res = await fetch('/api/students');
+      const data = await res.json();
+      const tbody = document.getElementById('studentsTableBody');
+      tbody.innerHTML = '';
+
+      data.forEach(stu => {
+        const row = document.createElement('tr');
+        row.className = "hover:bg-gray-100 cursor-pointer";
+        row.onclick = () => window.location.href = `/profile.html?id=${stu.id}`;
+        row.innerHTML = `
+          <td class="p-2 font-medium">${stu.name}</td>
+          <td class="p-2">${stu.email}</td>
+          <td class="p-2">${stu.phone || '-'}</td>
+          <td class="p-2">${stu.cf_handle || '-'}</td>
+          <td class="p-2">${stu.current_rating ?? '-'}</td>
+          <td class="p-2">${stu.max_rating ?? '-'}</td>
+          <td class="p-2">${stu.last_updated ? new Date(stu.last_updated).toLocaleDateString() : '-'}</td>
+          <td class="p-2 space-x-2">
+            <button class="bg-yellow-400 text-white px-2 py-1 rounded" onclick="event.stopPropagation(); editStudent(${stu.id})">Edit</button>
+            <button class="bg-red-500 text-white px-2 py-1 rounded" onclick="event.stopPropagation(); deleteStudent(${stu.id})">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    async function deleteStudent(id) {
+      if (!confirm('Are you sure?')) return;
+      await fetch('/api/students/' + id, { method: 'DELETE' });
+      loadStudents();
+    }
+
+    function editStudent(id) {
+      const name = prompt("Enter new name:");
+      const email = prompt("Enter new email:");
+      const phone = prompt("Enter phone:");
+      const cf_handle = prompt("Enter Codeforces handle:");
+      if (!name || !email) return alert("Name and email are required.");
+      fetch('/api/students/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, cf_handle })
+      }).then(loadStudents);
+    }
+
+    function addStudent() {
+      const name = prompt("Enter name:");
+      const email = prompt("Enter email:");
+      const phone = prompt("Enter phone:");
+      const cf_handle = prompt("Enter Codeforces handle:");
+      if (!name || !email) return alert("Name and email are required.");
+      fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, cf_handle })
+      }).then(loadStudents);
+    }
+
+    function downloadCSV() {
+      window.location.href = "/api/students/download";
+    }
+
+    window.onload = loadStudents;
+  </script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto p-4">
+    <h1 class="text-3xl font-bold mb-4">📊 Codeforces Student Manager</h1>
+    <div class="mb-4 space-x-2">
+      <button onclick="addStudent()" class="bg-blue-600 text-white px-4 py-2 rounded">+ Add Student</button>
+      <button onclick="downloadCSV()" class="bg-green-600 text-white px-4 py-2 rounded">Download CSV</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full bg-white shadow rounded">
+        <thead class="bg-gray-200">
+          <tr>
+            <th class="p-2 text-left">Name</th>
+            <th class="p-2 text-left">Email</th>
+            <th class="p-2 text-left">Phone</th>
+            <th class="p-2 text-left">Handle</th>
+            <th class="p-2 text-left">Rating</th>
+            <th class="p-2 text-left">Max</th>
+            <th class="p-2 text-left">Last Updated</th>
+            <th class="p-2 text-left">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="studentsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Profile</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
+  <div class="max-w-4xl mx-auto p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h2 id="profileHeader" class="text-2xl font-bold">Loading profile...</h2>
+      <div class="flex gap-3">
+        <label class="flex items-center">
+          <input type="checkbox" id="darkToggle" class="mr-1"> Dark Mode
+        </label>
+      </div>
+    </div>
+
+    <!-- 📅 Dropdown for filtering -->
+    <div class="mb-4">
+      <label for="daysSelect" class="mr-2 font-medium">View contests from:</label>
+      <select id="daysSelect" onchange="handleDayChange()" class="border p-1 rounded text-black">
+        <option value="30">Last 30 days</option>
+        <option value="90" selected>Last 90 days</option>
+        <option value="365">Last 365 days</option>
+      </select>
+    </div>
+
+    <!-- 📈 Contest Rating Chart -->
+    <div class="bg-white dark:bg-gray-800 shadow p-4 rounded mb-6">
+      <canvas id="ratingChart" height="300"></canvas>
+    </div>
+
+    <!-- 📋 Contest Table -->
+    <h3 class="text-xl font-semibold mb-2">Contest History</h3>
+    <div class="overflow-x-auto bg-white dark:bg-gray-800 shadow rounded">
+      <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" id="contestTable">
+        <thead class="bg-gray-50 dark:bg-gray-700">
+          <tr>
+            <th class="px-4 py-2 text-left text-sm font-medium">Contest</th>
+            <th class="px-4 py-2 text-left text-sm font-medium">Rank</th>
+            <th class="px-4 py-2 text-left text-sm font-medium">Old</th>
+            <th class="px-4 py-2 text-left text-sm font-medium">New</th>
+            <th class="px-4 py-2 text-left text-sm font-medium">Δ</th>
+            <th class="px-4 py-2 text-left text-sm font-medium">Date</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-600"></tbody>
+      </table>
+    </div>
+
+    <!-- 🧠 Problem Solving Stats -->
+    <h3 class="text-xl font-semibold mt-8 mb-4">Problem Solving Data (30 days)</h3>
+    <div id="solvingStats" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white dark:bg-gray-800 p-4 rounded shadow"><strong>Total solved:</strong> <span id="totalSolved">-</span></div>
+      <div class="bg-white dark:bg-gray-800 p-4 rounded shadow"><strong>Average rating:</strong> <span id="avgRating">-</span></div>
+      <div class="bg-white dark:bg-gray-800 p-4 rounded shadow"><strong>Hardest problem:</strong> <span id="hardestProblem">-</span></div>
+    </div>
+
+    <!-- 📊 Rating Bucket Bar Chart -->
+    <div class="bg-white dark:bg-gray-800 shadow mt-6 p-4 rounded">
+      <canvas id="ratingBarChart" height="300"></canvas>
+    </div>
+
+    <!-- 🔥 Submission Heatmap -->
+    <div id="heatmap" class="mt-6 grid grid-cols-7 gap-1"></div>
+
+    <!-- 🔔 Email Reminder Status -->
+    <div class="mt-6 p-4 bg-white dark:bg-gray-800 rounded shadow">
+      <h4 class="text-lg font-semibold mb-2">Email Reminder Settings</h4>
+      <p><strong>Reminders sent:</strong> <span id="reminderCount">-</span></p>
+      <label class="inline-flex items-center mt-2">
+        <input type="checkbox" id="emailToggle" class="mr-2"> Enable reminder emails
+      </label>
+    </div>
+  </div>
+
+  <script>
+    let ratingChart = null;
+    let barChart = null;
+    window.currentUserId = null;
+
+    async function loadProfile() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      const res = await fetch('/api/student/' + id);
+      const stu = await res.json();
+      document.getElementById('profileHeader').innerText = `${stu.name} (${stu.cf_handle})`;
+      document.getElementById('reminderCount').innerText = stu.email_reminders_sent || 0;
+      document.getElementById('emailToggle').checked = stu.email_enabled !== 0;
+      document.getElementById('emailToggle').addEventListener('change', () => {
+        const newVal = document.getElementById('emailToggle').checked ? 1 : 0;
+        fetch(`/api/students/${stu.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...stu, email_enabled: newVal })
+        });
+      });
+      window.currentUserId = stu.id;
+      loadContests(stu.id, 90);
+      loadSubmissionStats(stu.id, 30);
+    }
+
+    async function loadContests(userId, days = 90) {
+      const res = await fetch(`/api/student/${userId}/contests?days=${days}`);
+      const data = await res.json();
+      const tbody = document.querySelector('#contestTable tbody');
+      tbody.innerHTML = '';
+      const labels = [], ratings = [];
+
+      data.forEach(c => {
+        const date = new Date(c.timestamp * 1000).toLocaleDateString();
+        const delta = c.new_rating - c.old_rating;
+        const row = `<tr class="hover:bg-gray-100 dark:hover:bg-gray-700">
+          <td class="px-4 py-2">${c.contest_name}</td>
+          <td class="px-4 py-2">${c.rank}</td>
+          <td class="px-4 py-2">${c.old_rating}</td>
+          <td class="px-4 py-2">${c.new_rating}</td>
+          <td class="px-4 py-2" style="color:${delta >= 0 ? 'green' : 'red'}">${delta >= 0 ? '+' : ''}${delta}</td>
+          <td class="px-4 py-2">${date}</td>
+        </tr>`;
+        tbody.insertAdjacentHTML('beforeend', row);
+        labels.push(date);
+        ratings.push(c.new_rating);
+      });
+
+      const ctx = document.getElementById('ratingChart').getContext('2d');
+      if (ratingChart) ratingChart.destroy();
+      ratingChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Rating',
+            data: ratings,
+            borderColor: 'blue',
+            tension: 0.2,
+            fill: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: false } }
+        }
+      });
+    }
+
+    async function loadSubmissionStats(userId, days = 30) {
+      const res = await fetch(`/api/student/${userId}/submissions?days=${days}`);
+      const data = await res.json();
+      const solved = data.filter(s => s.verdict === 'OK');
+      const ratings = solved.map(p => p.rating).filter(Boolean);
+
+      document.getElementById('totalSolved').innerText = solved.length;
+      document.getElementById('avgRating').innerText = ratings.length ? (ratings.reduce((a, b) => a + b) / ratings.length).toFixed(1) : '-';
+      document.getElementById('hardestProblem').innerText = ratings.length ? Math.max(...ratings) : '-';
+
+      const buckets = {};
+      ratings.forEach(r => {
+        const bucket = Math.floor(r / 100) * 100;
+        buckets[bucket] = (buckets[bucket] || 0) + 1;
+      });
+
+      const labels = Object.keys(buckets).sort((a, b) => a - b);
+      const counts = labels.map(b => buckets[b]);
+      const ctx = document.getElementById('ratingBarChart').getContext('2d');
+      if (barChart) barChart.destroy();
+      barChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{ label: 'Problems by Rating', data: counts, backgroundColor: 'green' }]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+
+      drawHeatmap(solved.map(s => new Date(s.timestamp * 1000)));
+    }
+
+    function drawHeatmap(dates) {
+      const map = {};
+      dates.forEach(d => {
+        const key = d.toISOString().split('T')[0];
+        map[key] = (map[key] || 0) + 1;
+      });
+
+      const container = document.getElementById("heatmap");
+      container.innerHTML = '';
+      const today = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        const count = map[key] || 0;
+        const box = document.createElement('div');
+        box.className = 'w-4 h-4';
+        box.style.background = count === 0 ? '#e5e7eb' : count < 3 ? '#c6e48b' : count < 6 ? '#7bc96f' : '#196127';
+        box.title = `${key}: ${count}`;
+        container.appendChild(box);
+      }
+    }
+
+    function handleDayChange() {
+      const days = document.getElementById('daysSelect').value;
+      loadContests(window.currentUserId, parseInt(days));
+    }
+
+    document.getElementById('darkToggle').addEventListener('change', e => {
+      document.body.classList.toggle('dark', e.target.checked);
+    });
+
+    window.onload = loadProfile;
+  </script>
+</body>
+</html>
